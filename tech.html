@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учительский Календарь РБ 2025-2026</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Установка шрифта Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+        }
+        .day-cell {
+            padding: 4px 2px;
+            font-size: 0.75rem; /* text-xs */
+            height: 48px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 6px;
+            cursor: pointer;
+            position: relative; /* Для позиционирования индикатора заметки */
+            transition: background-color 0.15s, border-color 0.15s;
+        }
+        .day-number {
+            font-weight: 600;
+        }
+
+        /* Стиль для всплывающей подсказки */
+        .tooltip-content {
+            white-space: normal; 
+            max-width: 200px; 
+            text-align: left;
+        }
+
+        /* Цветовая легенда и стили */
+        .weekend { background-color: #fecaca; color: #dc2626; } /* Светло-Красный (Стандартный Выходной Сб/Вс) */
+        
+        /* Официальный праздник (Высший приоритет по цвету) */
+        .official-holiday { background-color: #ff8a8a; color: #7f1d1d; font-weight: 700; border: 2px solid #ef4444; } 
+        
+        /* Переносы */
+        .transfer-day-off { background-color: #6ee7b7; color: #065f46; font-weight: 700; border: 1px solid #10b981; } 
+        .transfer-workday { background-color: #bfdbfe; color: #1d4ed8; border: 1px dashed #3b82f6; font-weight: 700; } 
+        
+        /* Конкурсы/Олимпиады */
+        .competition { background-color: #fef08a; color: #a16207; border: 1px solid #eab308; } 
+        
+        /* Каникулы (Базовый стиль для рабочих дней) */
+        .school-holiday { background-color: #ffffff; color: #6d28d9; border: 1px solid #8b5cf6; } 
+        
+        .exam { background-color: #ccfbf1; color: #0f766e; border: 1px solid #14b8a6; font-weight: 700; } 
+        
+        .today { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; color: #ef4444 !important; } 
+
+        .current-month { background-color: #ffffff; }
+        .other-month { background-color: #e5e7eb; color: #6b7280; }
+
+        /* !!! КЛЮЧЕВОЕ ИЗМЕНЕНИЕ !!! Класс для наложения пурпурной рамки каникул на уже закрашенный фон */
+        /* Применяется к дням, которые являются каникулами, но также являются выходными/праздниками */
+        .holiday-overlay {
+            color: #6d28d9 !important; /* Пурпурный текст */
+            border: 1px solid #8b5cf6 !important; /* Пурпурная рамка */
+        }
+
+        /* Индикатор заметки */
+        .note-indicator {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            font-size: 0.7rem;
+            font-weight: 900;
+        }
+    </style>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Глобальные переменные для доступа в скрипте ниже
+        window.firebase = { 
+            initializeApp, 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged,
+            getFirestore, 
+            doc, 
+            addDoc, 
+            updateDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection,
+            setLogLevel
+        };
+    </script>
+</head>
+<body>
+
+    <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        <h1 class="text-3xl font-extrabold text-center text-gray-900 mb-2">Календарь Учителя</h1>
+        <p class="text-center text-lg text-gray-600 mb-8">Учебный год 2025 – 2026 (Сентябрь 2025 - Август 2026, Республика Беларусь)</p>
+
+        <div class="flex flex-wrap justify-center gap-3 mb-8 text-xs font-semibold">
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-fecaca"></span> — Выходной (Сб/Вс)</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-ff8a8a border border-2 border-red-600"></span> — **Красный день (Праздник)**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-white border border-1 border-violet-500"></span> — **Каникулы (\*)**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-ccfbf1 border border-1 border-teal-500"></span> — **ЦЭ**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-6ee7b7 border border-1 border-emerald-600"></span> — **Перенесенный Вых**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-bfdbfe border border-1 border-blue-600"></span> — **Рабочая Сб (Перенос)**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-fef08a border border-1 border-yellow-600"></span> — **Олимп/НПК**</span>
+            <span class="flex items-center text-indigo-600"># — Ваша заметка</span>
+        </div>
+
+        <div id="calendarContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            </div>
+    </div>
+
+    <div id="noteModal" class="hidden fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center p-4 z-[100]">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 id="modalTitle" class="text-xl font-bold text-gray-800 mb-4">Заметка на [Дата]</h3>
+            <textarea id="noteInput" class="w-full h-32 p-3 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 mb-4" placeholder="Введите вашу заметку..." maxlength="500"></textarea>
+            
+            <div class="flex justify-between items-center">
+                <button id="deleteNoteBtn" onclick="handleDeleteNote()" class="hidden bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                    Удалить
+                </button>
+                <div class="flex space-x-2">
+                    <button onclick="closeNoteModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg transition-colors">
+                        Отмена
+                    </button>
+                    <button onclick="handleSaveNote()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition-colors">
+                        Сохранить
+                    </button>
+                </div>
+            </div>
+            <input type="hidden" id="currentDateKey">
+        </div>
+    </div>
+
+    <script>
+        // Инициализация глобальных переменных Firebase
+        let app, db, auth;
+        let userId = null;
+        let isAuthReady = false;
+        const NOTES_COLLECTION = "notes";
+        
+        // Глобальные переменные Canvas. 
+        // ВАЖНО: При работе на GitHub Pages или локально, если эти переменные не определены,
+        // Firebase может не инициализироваться.
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'teacher-calendar-rb'; 
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // !!! ДЛЯ ТЕСТИРОВАНИЯ: ЗАМЕНИТЕ ЭТО НА СВОИ КЛЮЧИ FIREBASE ИЛИ ОСТАВЬТЕ ПУСТЫМ,
+        // ЧТОБЫ УВИДЕТЬ КАЛЕНДАРЬ, НО БЕЗ ЗАМЕТОК.
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+
+        // Состояние для заметок, загруженных из Firestore: { "YYYY-MM-DD": { id: "docId", content: "текст" } }
+        let userNotes = {};
+
+        // Дата сегодняшнего дня
+        const TODAY_DATE_KEY = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        
+        // --- ФУНКЦИЯ ДЛЯ ГЕНЕРАЦИИ ДАТ КАНИКУЛ И ДЛИТЕЛЬНЫХ СОБЫТИЙ ---
+        function generateDateRange(start, end, name, type) {
+            const events = {};
+            // Добавляем 'T00:00:00' для корректной работы с датами в разных часовых поясах
+            let current = new Date(start + 'T00:00:00'); 
+            const endDate = new Date(end + 'T00:00:00');
+
+            while (current <= endDate) {
+                const year = current.getFullYear();
+                const month = String(current.getMonth() + 1).padStart(2, '0');
+                const day = String(current.getDate()).padStart(2, '0');
+                const dateKey = `${year}-${month}-${day}`;
+                events[dateKey] = { name, type };
+                current.setDate(current.getDate() + 1);
+            }
+            return events;
+        }
+
+        // --- ДАТЫ ШКОЛЬНЫХ КАНИКУЛ (Только для 3-11 классов) ---
+        const SCHOOL_HOLIDAYS = {
+            // Осенние каникулы: 2 ноября – 9 ноября 2025 г.
+            ...generateDateRange('2025-11-02', '2025-11-09', 'Осенние каникулы (3-11 кл.)', 'school-holiday'),
+
+            // Зимние каникулы: 25 декабря 2025 г. – 7 января 2026 г.
+            ...generateDateRange('2025-12-25', '2026-01-07', 'Зимние каникулы (3-11 кл.)', 'school-holiday'),
+
+            // Весенние каникулы: 22 марта – 29 марта 2026 г.
+            ...generateDateRange('2026-03-22', '2026-03-29', 'Весенние каникулы (3-11 кл.)', 'school-holiday'),
+        };
+
+        // --- ДАТЫ ЦЭ (Централизованный экзамен - 11 класс) ---
+        const EXAMS = {
+            "2026-05-26": { name: "ЦЭ: Предмет на выбор (2-й экзамен)", type: "exam" },
+            "2026-05-29": { name: "ЦЭ: Русский или Белорусский язык (1-й экзамен)", type: "exam" },
+            "2026-06-20": { name: "ЦЭ: Резервный день (Предмет на выбор)", type: "exam" },
+            "2026-06-22": { name: "ЦЭ: Резервный день (Языки)", type: "exam" },
+            "2026-08-17": { name: "ЦЭ: Дополнительный резервный день", type: "exam" },
+            "2026-08-19": { name: "ЦЭ: Дополнительный резервный день", type: "exam" },
+        };
+
+        // --- ДАННЫЕ О МЕРОПРИЯТИЯХ (РБ) - Имеют ПРИОРИТЕТ над каникулами при наложении ---
+        const EVENTS_BASE = {
+            // СЕНТЯБРЬ 2025
+            "2025-09-17": { name: "День народного единства", type: "official-holiday" },
+            
+            // ОКТЯБРЬ 2025
+            ...generateDateRange('2025-10-01', '2025-10-18', 'Школьный этап олимпиад (1-й этап)', 'competition'),
+            "2025-10-05": { name: "День Учителя (Воскресенье)", type: "official-holiday" }, 
+
+            // НОЯБРЬ 2025
+            "2025-11-07": { name: "День Октябрьской революции", type: "official-holiday" }, 
+            "2025-11-14": { name: "Районный этап олимпиад (Начало)", type: "competition" },
+            "2025-11-22": { name: "НПК (Научно-практическая конференция), 1-й этап (Суббота)", type: "competition" },
+
+
+            // ДЕКАБРЬ 2025 (ПЕРЕНОСЫ)
+            "2025-12-20": { name: "Рабочая суббота (за 26.12)", type: "transfer-workday" },
+            "2025-12-25": { name: "Католическое Рождество", type: "official-holiday" }, 
+            "2025-12-26": { name: "Перенесенный Выходной (за 20.12)", type: "transfer-day-off" }, 
+
+            // ЯНВАРЬ 2026
+            "2026-01-01": { name: "Новый год", type: "official-holiday" },
+            "2026-01-02": { name: "Перенесенный Выходной (отработка 10.01)", type: "transfer-day-off" }, // Обновлено
+            "2026-01-07": { name: "Православное Рождество", type: "official-holiday" },
+            "2026-01-10": { name: "Рабочая суббота (отработка 02.01)", type: "transfer-workday" }, // ДОБАВЛЕНО
+            "2026-01-12": { name: "Областной этап олимпиад (Начало)", type: "competition" },
+
+            // ФЕВРАЛЬ 2026
+            "2026-02-23": { name: "День защитников Отечества", type: "official-holiday" },
+
+            // МАРТ 2026
+            "2026-03-08": { name: "День женщин", type: "official-holiday" },
+            "2026-03-23": { name: "Заключительный этап олимпиад (Начало)", type: "competition" },
+
+            // АПРЕЛЬ 2026 (ПЕРЕНОСЫ)
+            "2026-04-20": { name: "Перенесенный Выходной (за 25.04)", type: "transfer-day-off" },
+            "2026-04-21": { name: "Радуница", type: "official-holiday" },
+            "2026-04-25": { name: "Рабочая суббота (за 20.04)", type: "transfer-workday" },
+
+            // МАЙ 2026
+            "2026-05-01": { name: "Праздник труда", type: "official-holiday" },
+            "2026-05-09": { name: "День Победы", type: "official-holiday" },
+
+            // ИЮНЬ 2026
+            "2026-07-03": { name: "День Независимости РБ", type: "official-holiday" },
+        };
+        
+        // Объединяем все события. EVENTS_BASE и EXAMS перезаписывают SCHOOL_HOLIDAYS при коллизии.
+        const EVENTS = { ...SCHOOL_HOLIDAYS, ...EXAMS, ...EVENTS_BASE };
+
+        const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+        const WEEK_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+        // Начальная и конечная дата учебного года
+        const START_DATE = new Date(2025, 8, 1); 
+        const END_DATE = new Date(2026, 7, 31);   
+
+        // --- ФУНКЦИИ FIREBASE ---
+
+        async function initializeFirebase() {
+            // Если конфигурации нет, пропускаем инициализацию, чтобы не вызывать ошибок
+            if (!window.firebase || !firebaseConfig.apiKey) {
+                console.warn("Firebase config not available. Notes functionality disabled.");
+                return;
+            }
+            
+            try {
+                // window.firebase.setLogLevel('Debug'); // Закомментировано для чистоты консоли
+
+                app = window.firebase.initializeApp(firebaseConfig);
+                db = window.firebase.getFirestore(app);
+                auth = window.firebase.getAuth(app);
+                
+                if (initialAuthToken) {
+                    await window.firebase.signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await window.firebase.signInAnonymously(auth);
+                }
+                
+                window.firebase.onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        startListeningForNotes();
+                    } else {
+                        // Генерация анонимного ID, если анонимный вход не удался (например, из-за правил безопасности)
+                        userId = 'anon-' + (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 15)); 
+                        isAuthReady = true;
+                        startListeningForNotes();
+                    }
+                });
+                
+            } catch (error) {
+                console.error("Error initializing Firebase:", error);
+            }
+        }
+
+        function startListeningForNotes() {
+            if (!db || !userId) {
+                console.warn("Database or User ID not ready for listening.");
+                return;
+            }
+            
+            // Важное изменение: слушатель обновляет заметки и вызывает renderCalendar()
+            const notesRef = window.firebase.collection(db, `artifacts/${appId}/users/${userId}/${NOTES_COLLECTION}`);
+            
+            window.firebase.onSnapshot(notesRef, (snapshot) => {
+                const notes = {};
+                snapshot.forEach((doc) => {
+                    const data = doc.data();
+                    if (data.dateKey && data.content) {
+                        notes[data.dateKey] = { id: doc.id, content: data.content };
+                    }
+                });
+                userNotes = notes;
+                renderCalendar(); // Перерисовка календаря с учетом загруженных заметок
+            }, (error) => {
+                console.error("Error listening to notes:", error);
+            });
+        }
+
+        async function saveNote(dateKey, content, docId) {
+            if (!db || !userId) {
+                alert("Функция заметок отключена. Не удалось подключиться к базе данных.");
+                return;
+            }
+            
+            const noteData = { dateKey, content: content.trim() };
+            const userPath = `artifacts/${appId}/users/${userId}/${NOTES_COLLECTION}`;
+
+            try {
+                if (docId) {
+                    const docRef = window.firebase.doc(db, userPath, docId);
+                    await window.firebase.updateDoc(docRef, noteData);
+                } else {
+                    await window.firebase.addDoc(window.firebase.collection(db, userPath), noteData);
+                }
+            } catch (e) {
+                console.error("Error adding/updating document: ", e);
+            }
+        }
+
+        async function deleteNote(docId) {
+            if (!db || !userId || !docId) {
+                console.error("Cannot delete note. Missing ID or Firebase not ready.");
+                return;
+            }
+            
+            const userPath = `artifacts/${appId}/users/${userId}/${NOTES_COLLECTION}`;
+            
+            try {
+                await window.firebase.deleteDoc(window.firebase.doc(db, userPath, docId));
+                closeNoteModal();
+            } catch (e) {
+                console.error("Error deleting document: ", e);
+            }
+        }
+        
+        // --- ФУНКЦИИ МОДАЛЬНОГО ОКНА ---
+
+        function openNoteModal(dateKey) {
+            const date = new Date(dateKey + 'T00:00:00'); 
+            const dateStr = date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
+            
+            const note = userNotes[dateKey];
+            
+            document.getElementById('modalTitle').textContent = `Заметка на ${dateStr}`;
+            document.getElementById('currentDateKey').value = dateKey;
+            
+            const noteInput = document.getElementById('noteInput');
+            const deleteBtn = document.getElementById('deleteNoteBtn');
+
+            if (note) {
+                noteInput.value = note.content;
+                noteInput.dataset.docId = note.id;
+                deleteBtn.classList.remove('hidden');
+            } else {
+                noteInput.value = '';
+                noteInput.dataset.docId = '';
+                deleteBtn.classList.add('hidden');
+            }
+            
+            document.getElementById('noteModal').classList.remove('hidden');
+            noteInput.focus();
+        }
+
+        function closeNoteModal() {
+            document.getElementById('noteModal').classList.add('hidden');
+        }
+        
+        async function handleSaveNote() {
+            const dateKey = document.getElementById('currentDateKey').value;
+            const content = document.getElementById('noteInput').value;
+            const docId = document.getElementById('noteInput').dataset.docId;
+
+            if (content.trim() === '') {
+                if (docId) {
+                    await deleteNote(docId);
+                }
+                closeNoteModal();
+                return;
+            }
+            
+            await saveNote(dateKey, content, docId || null);
+            closeNoteModal();
+        }
+
+        function handleDeleteNote() {
+            const docId = document.getElementById('noteInput').dataset.docId;
+            if (docId && confirm('Вы уверены, что хотите удалить эту заметку?')) {
+                deleteNote(docId);
+            }
+        }
+
+
+        // --- ФУНКЦИИ РЕНДЕРИНГА КАЛЕНДАРЯ ---
+        
+        function generateMonthBlock(date) {
+            const year = date.getFullYear();
+            const month = date.getMonth(); 
+            
+            const firstDayOfMonth = new Date(year, month, 1);
+            const firstWeekday = (firstDayOfMonth.getDay() === 0) ? 7 : firstDayOfMonth.getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            let calendarHtml = `
+                <h2 class="text-lg font-bold text-center py-3 bg-indigo-600 text-white">${MONTH_NAMES[month]} ${year}</h2>
+                <div class="calendar-grid bg-gray-200">
+                    ${WEEK_DAYS.map(day => `<div class="text-center py-2 text-sm font-semibold text-gray-700">${day}</div>`).join('')}
+                </div>
+                <div class="calendar-grid bg-gray-100">
+            `;
+            
+            let monthEventsList = [];
+
+            // 1. Пустые ячейки для сдвига
+            for (let i = 0; i < firstWeekday - 1; i++) {
+                calendarHtml += `<div class="day-cell other-month"></div>`;
+            }
+
+            // 2. Дни месяца
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayString = String(day).padStart(2, '0');
+                const monthString = String(month + 1).padStart(2, '0');
+                const dateKey = `${year}-${monthString}-${dayString}`;
+                
+                const currentDate = new Date(year, month, day);
+                const dayOfWeek = currentDate.getDay(); // 0=Вс, 1=Пн
+                
+                const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+                const isSchoolHolidayMarker = !!SCHOOL_HOLIDAYS[dateKey]; 
+                const eventData = EVENTS_BASE[dateKey] || EXAMS[dateKey]; // Только для событий, которые ПЕРЕКРАШИВАЮТ
+                
+                let classes = 'current-month text-gray-800'; 
+                let tooltipContent = `<div class="font-bold">${day}.${monthString}.${year}</div>`;
+                let label = '';
+                
+                // --- ШАГ 1: Применение маркера каникул (Звездочка, Рамка, Пурпурный текст) ---
+                if (isSchoolHolidayMarker) { 
+                    classes = 'school-holiday'; // Базовый класс каникул (белый фон + пурпурная рамка/текст)
+                    tooltipContent += `<div class="mt-1">${SCHOOL_HOLIDAYS[dateKey].name}</div>`;
+                    label = 'Каникулы *';
+                    
+                    // Добавление каникул в список событий (если их не перекроет другое событие)
+                     monthEventsList.push({ 
+                        date: dateKey, name: SCHOOL_HOLIDAYS[dateKey].name, type: 'school-holiday', isNote: false 
+                    });
+                } else {
+                     classes = 'bg-white hover:bg-gray-50';
+                }
+
+                // --- ШАГ 2: Применение цветового приоритета (Праздник > Перенос > Выходной) ---
+
+                // 2a. Приоритетное событие (Official Holiday, Transfer, Exam, Competition)
+                if (eventData) {
+                    let newClasses = eventData.type;
+                    
+                    // Если это каникулы, добавляем класс overlay, чтобы сохранить пурпурный текст/рамку
+                    if (isSchoolHolidayMarker) {
+                         newClasses += ' holiday-overlay';
+                    }
+                    classes = newClasses;
+                    tooltipContent += `<div class="mt-1">${eventData.name}</div>`;
+                    
+                    // Добавляем/обновляем событие в списке (Official/Exam/Transfer events replace generic school-holiday entry)
+                    monthEventsList = monthEventsList.filter(e => e.date !== dateKey || e.type !== 'school-holiday');
+                    monthEventsList.push({ date: dateKey, name: eventData.name, type: eventData.type, isNote: false });
+
+                    // Определение основной метки
+                    if (eventData.type === 'competition') {
+                        label = (eventData.name.includes("Олимп") || eventData.name.includes("НПК")) ? "Олимп/НПК" : "Конкурс";
+                    } else if (eventData.type.includes('transfer')) {
+                        label = eventData.type === 'transfer-day-off' ? 'Перен. Вых' : 'Рабочая Сб'; 
+                    } else if (eventData.type === 'exam') {
+                        label = 'ЦЭ'; 
+                    } else if (eventData.type === 'official-holiday') { 
+                         label = eventData.name.split(' ')[0]; 
+                    }
+                     // Если это каникулы + праздник, сохраняем метку каникул
+                    if (isSchoolHolidayMarker && !label.includes('*')) {
+                        label += ' *';
+                    }
+
+                } 
+                // 2b. Стандартный Выходной (Сб/Вс)
+                else if (isWeekend) {
+                    let newClasses = 'weekend'; // Светло-красный фон
+                    
+                    // Если это каникулы, добавляем класс overlay
+                    if (isSchoolHolidayMarker) {
+                        newClasses += ' holiday-overlay';
+                    }
+                    classes = newClasses;
+
+                    tooltipContent += `<div class="mt-1">Выходной (Сб/Вс)</div>`;
+                    if (isSchoolHolidayMarker) {
+                         // Если это Сб/Вс и Каникулы, показываем обе метки
+                         label = label || 'Каникулы *';
+                    }
+                }
+                
+                // --- 3. Проверка на заметку (Наивысший приоритет символа) ---
+                let noteIndicator = '';
+                const noteData = userNotes[dateKey];
+                if (noteData) {
+                    noteIndicator = '<span class="note-indicator text-indigo-600">#</span>';
+                    const noteSnippet = noteData.content.substring(0, 50).trim();
+                    tooltipContent += `<div class="mt-2 pt-2 border-t border-gray-600">Заметка (#): <span class="font-semibold">${noteSnippet}${noteData.content.length > 50 ? '...' : ''}</span></div>`;
+                    
+                     monthEventsList.push({ 
+                        date: dateKey, name: noteData.content, type: 'user-note', isNote: true 
+                    });
+                }
+
+                // --- 4. Проверка на сегодняшний день (Высший приоритет отображения) ---
+                if (dateKey === TODAY_DATE_KEY) {
+                    classes += ' today';
+                    tooltipContent = `<div class="font-bold text-lg mb-1">СЕГОДНЯ</div>` + tooltipContent;
+                    label = label || 'СЕГОДНЯ';
+                }
+
+                calendarHtml += `
+                    <div class="day-cell ${classes} relative group" 
+                         data-date="${dateKey}" 
+                         onclick="openNoteModal('${dateKey}')">
+                        <span class="day-number">${day}</span>
+                        ${noteIndicator}
+                        ${label ? `<span class="text-[0.6rem] leading-none opacity-80 mt-1">${label}</span>` : ''}
+                        
+                        <span class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50 shadow-lg tooltip-content">
+                            ${tooltipContent}
+                        </span>
+                    </div>
+                `;
+            }
+
+            // 3. Добавляем пустые ячейки в конце
+            const totalCells = firstWeekday - 1 + daysInMonth;
+            const remainingCells = (42 - totalCells) % 7; 
+
+            for (let i = 0; i < remainingCells; i++) {
+                calendarHtml += `<div class="day-cell other-month"></div>`;
+            }
+
+            calendarHtml += `</div>`; // Закрываем calendar-grid
+
+            // 4. Генерируем список событий (Summary List HTML)
+            let summaryHtml = '';
+            if (monthEventsList.length > 0) {
+                 const uniqueEvents = [];
+                const addedEvents = new Set();
+
+                // Сначала добавляем все события (кроме заметок)
+                monthEventsList.filter(e => !e.isNote).forEach(event => {
+                    const key = event.date + event.type;
+                    if (!addedEvents.has(key)) {
+                        uniqueEvents.push(event);
+                        addedEvents.add(key);
+                    }
+                });
+                
+                // Затем добавляем все заметки
+                monthEventsList.filter(e => e.isNote).forEach(note => {
+                    uniqueEvents.push(note);
+                });
+
+                uniqueEvents.sort((a, b) => new Date(a.date + 'T00:00:00') - new Date(b.date + 'T00:00:00'));
+                
+                const consolidatedEvents = [];
+                if (uniqueEvents.length > 0) {
+                    let currentGroup = { ...uniqueEvents[0] };
+                    let groupEnd = new Date(currentGroup.date + 'T00:00:00');
+                    
+                    for (let i = 1; i < uniqueEvents.length; i++) {
+                        const nextItem = uniqueEvents[i];
+                        const nextDate = new Date(nextItem.date + 'T00:00:00');
+                        
+                        if (!currentGroup.isNote && !nextItem.isNote && 
+                            currentGroup.name === nextItem.name && 
+                            currentGroup.type === nextItem.type &&
+                            (nextDate.getTime() - groupEnd.getTime()) === (1000 * 60 * 60 * 24) 
+                        ) {
+                            groupEnd = nextDate; 
+                        } else {
+                            currentGroup.endDate = groupEnd.toLocaleDateString('en-CA');
+                            consolidatedEvents.push(currentGroup);
+                            
+                            currentGroup = { ...nextItem };
+                            groupEnd = new Date(currentGroup.date + 'T00:00:00');
+                        }
+                    }
+                    currentGroup.endDate = groupEnd.toLocaleDateString('en-CA');
+                    consolidatedEvents.push(currentGroup);
+                }
+
+                const listItems = consolidatedEvents.map(item => {
+                    const startDate = new Date(item.date + 'T00:00:00');
+                    const endDate = new Date(item.endDate + 'T00:00:00');
+                    
+                    let dateFormatted;
+                    if (item.date === item.endDate) {
+                        dateFormatted = startDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                    } else {
+                        const startDay = startDate.toLocaleDateString('ru-RU', { day: 'numeric' });
+                        const endFormatted = endDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                        dateFormatted = `${startDay} - ${endFormatted}`;
+                    }
+                    
+                    let icon = '';
+                    let colorClass = 'text-gray-700';
+                    
+                    if (item.isNote) {
+                        icon = '#'; 
+                        colorClass = 'text-indigo-600';
+                    } else if (item.type === 'official-holiday') {
+                        icon = '🔴';
+                        colorClass = 'text-red-700 font-bold';
+                    } else if (item.type === 'exam') {
+                        icon = '📚';
+                        colorClass = 'text-teal-600 font-semibold';
+                    } else if (item.type.includes('transfer-workday')) {
+                        icon = '➡️📅';
+                        colorClass = 'text-blue-600 font-bold';
+                    } else if (item.type.includes('transfer-day-off')) {
+                        icon = '➡️🛌';
+                        colorClass = 'text-green-600 font-bold';
+                    } else if (item.type === 'competition') {
+                        icon = '🏆';
+                        colorClass = 'text-yellow-700';
+                    } else if (item.type === 'school-holiday') {
+                        icon = '⭐'; 
+                        colorClass = 'text-purple-600';
+                    } else {
+                        icon = '•';
+                    }
+                    
+                    let name = item.name;
+                    if(item.isNote) {
+                        name = name.substring(0, 100).trim();
+                        if (item.name.length > 100) name += '...';
+                        colorClass += ' italic';
+                    }
+
+                    return `
+                        <li class="flex items-start mb-1 leading-tight">
+                            <span class="mr-2 flex-shrink-0 text-sm">${icon}</span>
+                            <span class="text-xs ${colorClass}">
+                                <span class="font-bold">${dateFormatted}:</span> ${name}
+                            </span>
+                        </li>
+                    `;
+                }).join('');
+
+                summaryHtml = `
+                    <div class="p-4 bg-gray-50 border-t border-gray-200">
+                        <h3 class="font-bold text-sm text-gray-800 mb-2">События месяца:</h3>
+                        <ul class="list-none p-0 m-0 space-y-1">
+                            ${listItems}
+                        </ul>
+                    </div>
+                `;
+            }
+
+
+            return `
+                <div class="bg-white rounded-xl shadow-lg overflow-hidden">
+                    ${calendarHtml}
+                    ${summaryHtml}
+                </div>
+            `;
+        }
+
+        /**
+         * Основная функция рендеринга.
+         */
+        function renderCalendar() {
+            const container = document.getElementById('calendarContainer');
+            let current = new Date(START_DATE.getTime()); 
+            let html = '';
+
+            for (let i = 0; i < 12; i++) {
+                if (current.getFullYear() > 2026 || (current.getFullYear() === 2026 && current.getMonth() > 7)) {
+                    break;
+                }
+                
+                html += generateMonthBlock(current);
+                current.setMonth(current.getMonth() + 1);
+            }
+
+            container.innerHTML = html;
+        }
+
+        // 🚀 КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Сначала рендерим календарь, потом пытаемся подключить Firebase.
+        window.onload = async function() {
+            // 1. Немедленно отрисовываем календарь со статическими данными
+            renderCalendar(); 
+            
+            // 2. Асинхронно запускаем инициализацию Firebase для заметок
+            await initializeFirebase();
+        };
+    </script>
+</body>
+</html>
