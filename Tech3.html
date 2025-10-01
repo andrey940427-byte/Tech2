@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Учительский Календарь РБ 2025-2026</title>
+    <!-- Подключение Tailwind CSS для стилей -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Установка шрифта Inter */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            /* Исправление: Ограничиваем ширину и предотвращаем горизонтальную прокрутку */
+            max-width: 100vw; 
+            overflow-x: hidden; 
+        }
+        /* Убедимся, что главный контейнер также не вызывает переполнения */
+        .main-container-wrapper {
+            box-sizing: border-box;
+            width: 100%;
+        }
+
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 1px;
+        }
+        .day-cell {
+            padding: 4px 2px;
+            font-size: 0.75rem; /* text-xs */
+            height: 48px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            border-radius: 6px;
+            cursor: pointer; 
+            position: relative; 
+            transition: background-color 0.15s, border-color 0.15s;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+        }
+        .day-cell:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        .day-number {
+            font-weight: 600;
+        }
+
+        /* --- Стили для Всплывающего Окна (Popover) --- */
+        .popover-box {
+            white-space: normal; 
+            max-width: 250px; 
+            text-align: left;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease-in-out;
+            transform: translate(-50%, 0); 
+            margin-bottom: 8px; 
+            
+            /* Базовая позиция: СВЕРХУ */
+            bottom: 100%;
+            /* Фикс обрезания по горизонтали: центруем относительно cell */
+            left: 50%;
+            z-index: 50;
+        }
+        
+        /* Позиция для ПЕРВОЙ СТРОКИ: СНИЗУ */
+        .popover-below .popover-box {
+            bottom: auto;
+            top: 100%;
+            margin-bottom: 0;
+            margin-top: 8px;
+        }
+
+        /* Дополнительный фикс для крайних левых/правых ячеек, чтобы поповер не выходил за край экрана */
+        .day-cell:nth-child(7n+1):hover .popover-box { /* Первый столбец */
+            transform: translateX(0); /* Сдвигаем влево, чтобы край совпадал с ячейкой */
+            left: 0;
+        }
+
+        .day-cell:nth-child(7n):hover .popover-box { /* Последний столбец */
+            transform: translateX(-100%); /* Сдвигаем вправо, чтобы край совпадал с ячейкой */
+            left: 100%;
+        }
+
+        /* Возвращаем центрирование для остальных ячеек */
+        .day-cell:not(:nth-child(7n+1)):not(:nth-child(7n)):hover .popover-box {
+            transform: translate(-50%, 0);
+            left: 50%;
+        }
+
+
+        .day-cell:hover .popover-box {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* --- Цветовая легенда и стили --- */
+        .weekend { background-color: #fecaca; color: #dc2626; } 
+        .official-holiday { background-color: #ff8a8a; color: #7f1d1d; font-weight: 700; border: 2px solid #ef4444; } 
+        .transfer-day-off { background-color: #6ee7b7; color: #065f46; font-weight: 700; border: 1px solid #10b981; } 
+        .transfer-workday { background-color: #bfdbfe; color: #1d4ed8; border: 1px dashed #3b82f6; font-weight: 700; } 
+        .competition { background-color: #fef08a; color: #a16207; border: 1px solid #eab308; } 
+        .school-holiday { background-color: #ffffff; color: #6d28d9; border: 1px solid #8b5cf6; } 
+        .exam { background-color: #ccfbf1; color: #0f766e; border: 1px solid #14b8a6; font-weight: 700; } 
+        .catholic-holiday { background-color: #fce7f3; color: #9d174d; border: 1px solid #db2777; } 
+        .orthodox-holiday { background-color: #fffbeb; color: #b45309; border: 1px solid #f59e0b; } 
+        .niko-testing { background-color: #f3e8ff; color: #7e22ce; border: 1px solid #c084fc; font-weight: 700; } 
+
+        .today { background-color: #fee2e2 !important; border: 2px solid #ef4444 !important; color: #ef4444 !important; } 
+
+        .current-month { background-color: #ffffff; }
+        .other-month { background-color: #e5e7eb; color: #6b7280; }
+
+        .holiday-overlay {
+            color: #6d28d9 !important; 
+            border: 1px solid #8b5cf6 !important; 
+        }
+    </style>
+</head>
+<body>
+
+    <div class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8 main-container-wrapper">
+        <h1 class="text-3xl font-extrabold text-center text-gray-900 mb-2">Календарь Учителя</h1>
+        <p class="text-center text-lg text-gray-600 mb-8">Учебный год 2025 – 2026 (Сентябрь 2025 - Август 2026, Республика Беларусь)</p>
+
+        <!-- Легенда -->
+        <div class="flex flex-wrap justify-center gap-3 mb-8 text-xs font-semibold">
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-fecaca"></span> — Выходной (Сб/Вс)</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-ff8a8a border border-2 border-red-600"></span> — **Красный день (Праздник)**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-white border border-1 border-violet-500"></span> — **Каникулы (\*)**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-ccfbf1 border border-1 border-teal-500"></span> — **ЦЭ**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-f3e8ff border border-1 border-purple-400"></span> — **НИКО**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-6ee7b7 border border-1 border-emerald-600"></span> — **Перенесенный Вых**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-bfdbfe border border-1 border-blue-600"></span> — **Рабочая Сб (Перенос)**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-fef08a border border-1 border-yellow-600"></span> — **Олимп/НПК**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-fce7f3 border border-1 border-pink-700"></span> — **Кат. Праздник**</span>
+            <span class="flex items-center"><span class="w-4 h-4 rounded-full mr-1 bg-fffbeb border border-1 border-amber-500"></span> — **Прав. Праздник**</span>
+        </div>
+
+        <!-- Контейнер для месяцев -->
+        <div id="calendarContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Здесь будут сгенерированы календари -->
+        </div>
+    </div>
+
+    <script>
+        // Дата сегодняшнего дня
+        const TODAY_DATE_KEY = new Date().toLocaleDateString('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        
+        // --- ФУНКЦИИ ДАННЫХ КАЛЕНДАРЯ ---
+        function generateDateRange(start, end, name, type) {
+            const events = {};
+            // Добавляем 'T00:00:00' для избежания проблем с часовыми поясами
+            let current = new Date(start + 'T00:00:00'); 
+            const endDate = new Date(end + 'T00:00:00');
+
+            while (current <= endDate) {
+                const year = current.getFullYear();
+                const month = String(current.getMonth() + 1).padStart(2, '0');
+                const day = String(current.getDate()).padStart(2, '0');
+                const dateKey = `${year}-${month}-${day}`;
+                events[dateKey] = { name, type };
+                current.setDate(current.getDate() + 1);
+            }
+            return events;
+        }
+
+        // Каникулы
+        const SCHOOL_HOLIDAYS = {
+            ...generateDateRange('2025-11-02', '2025-11-09', 'Осенние каникулы (3-11 кл.)', 'school-holiday'),
+            ...generateDateRange('2025-12-25', '2026-01-07', 'Зимние каникулы (3-11 кл.)', 'school-holiday'),
+            ...generateDateRange('2026-03-22', '2026-03-29', 'Весенние каникулы (3-11 кл.)', 'school-holiday'),
+        };
+
+        // Экзамены (ЦЭ)
+        const EXAMS = {
+            "2026-05-26": { name: "ЦЭ: Предмет на выбор (2-й экзамен)", type: "exam" },
+            "2026-05-29": { name: "ЦЭ: Русский или Белорусский язык (1-й экзамен)", type: "exam" },
+            "2026-06-20": { name: "ЦЭ: Резервный день (Предмет на выбор)", type: "exam" },
+            "2026-06-22": { name: "ЦЭ: Резервный день (Языки)", type: "exam" },
+            "2026-08-17": { name: "ЦЭ: Дополнительный резервный день", type: "exam" },
+            "2026-08-19": { name: "ЦЭ: Дополнительный резервный день", type: "exam" },
+        };
+        
+        // НИКО (Национальные исследования качества образования) - Mock Dates
+        const NIKO_TESTING = {
+            "2025-10-20": { name: "НИКО: Математика (6 класс)", type: "niko-testing" },
+            "2026-04-15": { name: "НИКО: Информатика (8 класс)", type: "niko-testing" },
+        };
+
+        // Основные праздники, переносы и религиозные праздники
+        const EVENTS_BASE = {
+            // Государственные
+            "2025-09-17": { name: "День народного единства", type: "official-holiday" },
+            "2025-11-07": { name: "День Октябрьской революции", type: "official-holiday" }, 
+            "2026-02-23": { name: "День защитников Отечества", type: "official-holiday" },
+            "2026-03-08": { name: "День женщин", type: "official-holiday" },
+            "2026-05-01": { name: "Праздник труда", type: "official-holiday" },
+            "2026-05-09": { name: "День Победы", type: "official-holiday" },
+            "2026-07-03": { name: "День Независимости РБ", type: "official-holiday" },
+            
+            // Конкурсы
+            ...generateDateRange('2025-10-01', '2025-10-18', 'Школьный этап олимпиад (1-й этап)', 'competition'),
+            "2025-11-14": { name: "Районный этап олимпиад (Начало)", type: "competition" },
+            "2025-11-22": { name: "НПК (Научно-практическая конференция), 1-й этап (Суббота)", type: "competition" },
+            "2026-01-12": { name: "Областной этап олимпиад (Начало)", type: "competition" },
+            "2026-03-23": { name: "Заключительный этап олимпиад (Начало)", type: "competition" },
+            
+            // Переносы
+            "2025-12-20": { name: "Рабочая суббота (за 26.12)", type: "transfer-workday" },
+            "2025-12-26": { name: "Перенесенный Выходной (за 20.12)", type: "transfer-day-off" }, 
+            "2026-01-02": { name: "Перенесенный Выходной (отработка 10.01)", type: "transfer-day-off" }, 
+            "2026-01-10": { name: "Рабочая суббота (отработка 02.01)", type: "transfer-workday" }, 
+            "2026-04-20": { name: "Перенесенный Выходной (за 25.04)", type: "transfer-day-off" },
+            "2026-04-25": { name: "Рабочая суббота (за 20.04)", type: "transfer-workday" },
+            
+            // Религиозные праздники
+            "2025-10-05": { name: "День Учителя (Воскресенье)", type: "official-holiday" }, 
+            "2025-12-25": { name: "Католическое Рождество Христово (C)", type: "official-holiday" }, 
+            "2026-01-01": { name: "Торжество Пресвятой Богородицы (C)", type: "official-holiday" }, 
+            "2026-01-06": { name: "Католическое Богоявление (Три Короля) (C)", type: "catholic-holiday" },
+            "2026-01-07": { name: "Православное Рождество Христово (П)", type: "official-holiday" }, 
+            "2026-01-19": { name: "Православное Крещение Господне (П)", type: "orthodox-holiday" },
+            "2026-03-29": { name: "Католическое Вербное воскресенье (C)", type: "catholic-holiday" },
+            "2026-04-05": { name: "Католическая Пасха (C)", type: "catholic-holiday" },
+            "2026-04-12": { name: "Православное Вербное воскресенье (П)", type: "orthodox-holiday" },
+            "2026-04-19": { name: "Православная Пасха (П)", type: "orthodox-holiday" },
+            "2026-04-21": { name: "Радуница (П)", type: "official-holiday" }, 
+            "2026-05-28": { name: "Православное Вознесение Господне (П)", type: "orthodox-holiday" },
+            "2026-06-04": { name: "Католическое Вознесение (C)", type: "catholic-holiday" },
+            "2026-06-07": { name: "Православная Троица / Пятидесятница (П)", type: "orthodox-holiday" },
+            "2026-06-14": { name: "Католическая Троица (C)", type: "catholic-holiday" },
+            "2026-08-19": { name: "Православное Преображение Господне (П)", type: "orthodox-holiday" },
+            "2026-08-28": { name: "Православное Успение Пресвятой Богородицы (П)", type: "orthodox-holiday" },
+        };
+        
+        // Объединяем все события
+        const EVENTS = { ...SCHOOL_HOLIDAYS, ...EXAMS, ...NIKO_TESTING, ...EVENTS_BASE };
+
+        const MONTH_NAMES = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
+        const WEEK_DAYS = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+
+        // Начальная и конечная дата учебного года
+        const START_DATE = new Date(2025, 8, 1); 
+        const END_DATE = new Date(2026, 7, 31);   
+
+        // --- ФУНКЦИИ ГЕНЕРАЦИИ КОНТЕНТА ПОПОВЕРА ---
+
+        function getIconByEventType(type) {
+            switch (type) {
+                case 'official-holiday': return '🔴';
+                case 'catholic-holiday': return '🕊️';
+                case 'orthodox-holiday': return '✨';
+                case 'exam': return '📚';
+                case 'niko-testing': return '🧠'; 
+                case 'competition': return '🏆';
+                case 'transfer-day-off': return '➡️🛌';
+                case 'transfer-workday': return '➡️📅';
+                case 'school-holiday': return '⭐';
+                case 'weekend': return '🛌';
+                default: return '•';
+            }
+        }
+
+        function getEventsForDay(dateKey) {
+            const events = [];
+            
+            // Каникулы
+            if (SCHOOL_HOLIDAYS[dateKey]) {
+                events.push(SCHOOL_HOLIDAYS[dateKey]);
+            }
+            // Все остальные приоритетные события (включая НИКО и ЦЭ)
+            if (EVENTS_BASE[dateKey]) {
+                events.push(EVENTS_BASE[dateKey]);
+            }
+            if (EXAMS[dateKey]) {
+                events.push(EXAMS[dateKey]);
+            }
+             if (NIKO_TESTING[dateKey]) {
+                events.push(NIKO_TESTING[dateKey]);
+            }
+
+            // Добавляем стандартный выходной, если нет других событий
+            const date = new Date(dateKey + 'T00:00:00');
+            const dayOfWeek = date.getDay();
+            const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+            if (isWeekend && events.length === 0) {
+                 events.push({ name: "Стандартный выходной (Сб/Вс)", type: "weekend" });
+            }
+
+            // Удаляем дубликаты
+            const uniqueEvents = {};
+            events.forEach(event => uniqueEvents[event.name] = event);
+            return Object.values(uniqueEvents);
+        }
+
+        function generatePopoverContent(dateKey) {
+            const date = new Date(dateKey + 'T00:00:00'); 
+            const dateStr = date.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const events = getEventsForDay(dateKey);
+
+            let content = `<div class="font-bold text-sm mb-1">${dateStr}</div><hr class="mb-2 border-gray-600"/>`;
+
+            if (events.length === 0) {
+                content += '<p class="text-xs italic text-gray-400">Нет специальных событий.</p>';
+            } else {
+                content += events.map(event => {
+                    return `
+                        <div class="flex items-start mb-1">
+                            <span class="mr-2 text-sm flex-shrink-0">${getIconByEventType(event.type)}</span>
+                            <p class="text-xs leading-tight">${event.name}</p>
+                        </div>
+                    `;
+                }).join('');
+            }
+            return content;
+        }
+
+        // --- ФУНКЦИИ РЕНДЕРИНГА КАЛЕНДАРЯ ---
+        
+        function generateMonthBlock(date) {
+            const year = date.getFullYear();
+            const month = date.getMonth(); 
+            
+            const firstDayOfMonth = new Date(year, month, 1);
+            // Получаем день недели (1=Пн, 7=Вс)
+            const firstWeekday = (firstDayOfMonth.getDay() === 0) ? 7 : firstDayOfMonth.getDay(); 
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+            let calendarHtml = `
+                <h2 class="text-lg font-bold text-center py-3 bg-indigo-600 text-white rounded-t-xl">${MONTH_NAMES[month]} ${year}</h2>
+                <div class="calendar-grid bg-gray-200">
+                    ${WEEK_DAYS.map(day => `<div class="text-center py-2 text-sm font-semibold text-gray-700">${day}</div>`).join('')}
+                </div>
+                <div class="calendar-grid bg-gray-100">
+            `;
+            
+            let monthEventsList = [];
+            let cellIndex = 0; // Общий индекс ячейки (включая пустые)
+
+            // 1. Пустые ячейки для сдвига
+            for (let i = 0; i < firstWeekday - 1; i++) {
+                calendarHtml += `<div class="day-cell other-month"></div>`;
+                cellIndex++;
+            }
+
+            // 2. Дни месяца
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayString = String(day).padStart(2, '0');
+                const monthString = String(month + 1).padStart(2, '0');
+                const dateKey = `${year}-${monthString}-${dayString}`;
+                
+                const currentDate = new Date(year, month, day);
+                const dayOfWeek = currentDate.getDay(); 
+                
+                const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6);
+                const isSchoolHolidayMarker = !!SCHOOL_HOLIDAYS[dateKey]; 
+                
+                // Объединяем все типы событий для определения цвета
+                const eventData = EVENTS_BASE[dateKey] || EXAMS[dateKey] || NIKO_TESTING[dateKey];
+                
+                let classes = 'current-month text-gray-800'; 
+                let label = '';
+                
+                // --- ШАГ 1: Применение маркера каникул ---
+                if (isSchoolHolidayMarker) { 
+                    classes = 'school-holiday';
+                    label = 'Кан *';
+                    monthEventsList.push({ date: dateKey, name: SCHOOL_HOLIDAYS[dateKey].name, type: 'school-holiday' });
+                } else {
+                     classes = 'bg-white hover:bg-gray-50';
+                }
+
+                // --- ШАГ 2: Применение цветового приоритета ---
+
+                if (eventData) {
+                    let newClasses = eventData.type;
+                    
+                    if (isSchoolHolidayMarker) {
+                         newClasses += ' holiday-overlay';
+                    }
+                    classes = newClasses;
+                    
+                    monthEventsList = monthEventsList.filter(e => e.date !== dateKey || e.type !== 'school-holiday');
+                    monthEventsList.push({ date: dateKey, name: eventData.name, type: eventData.type });
+
+                    // Сокращенная метка
+                    if (eventData.type === 'competition') {
+                        label = (eventData.name.includes("Олимп") || eventData.name.includes("НПК")) ? "Олимп" : "Конкурс";
+                    } else if (eventData.type.includes('transfer')) {
+                        label = eventData.type === 'transfer-day-off' ? 'Вых' : 'Раб Сб'; 
+                    } else if (eventData.type === 'exam') {
+                        label = 'ЦЭ'; 
+                    } else if (eventData.type === 'niko-testing') {
+                        label = 'НИКО'; 
+                    } else if (eventData.type === 'official-holiday') { 
+                         label = eventData.name.split(' ')[0]; 
+                    } else if (eventData.type.includes('holiday')) {
+                         label = eventData.name.split(' ')[0]; 
+                    }
+
+                    if (isSchoolHolidayMarker && !label.includes('*')) {
+                        label += ' *';
+                    }
+
+                } 
+                else if (isWeekend) {
+                    let newClasses = 'weekend'; 
+                    
+                    if (isSchoolHolidayMarker) {
+                        newClasses += ' holiday-overlay';
+                    }
+                    classes = newClasses;
+                    
+                    if (isSchoolHolidayMarker) {
+                         label = label || 'Кан *';
+                    }
+                }
+                
+                // --- 3. Проверка на сегодняшний день ---
+                if (dateKey === TODAY_DATE_KEY) {
+                    classes += ' today';
+                    label = label || 'СЕГОДНЯ';
+                }
+
+                // --- 4. Определение позиции поповера ---
+                // Если ячейка находится в первой визуальной строке (индекс 0-6), размещаем поповер снизу.
+                const popoverPositionClass = (cellIndex < 7) ? 'popover-below' : '';
+
+                // Генерируем контент для поповера
+                const popoverContent = generatePopoverContent(dateKey);
+
+                calendarHtml += `
+                    <div class="day-cell ${classes} ${popoverPositionClass} relative group">
+                        <span class="day-number">${day}</span>
+                        ${label ? `<span class="text-[0.6rem] leading-none opacity-80 mt-1">${label}</span>` : ''}
+                        
+                        <!-- Всплывающее информационное окно (Popover) -->
+                        <div class="popover-box absolute left-1/2 bg-gray-800 text-white p-3 rounded-lg shadow-xl z-50">
+                            ${popoverContent}
+                        </div>
+                    </div>
+                `;
+                cellIndex++;
+            }
+
+            // 3. Добавляем пустые ячейки в конце
+            const totalCells = cellIndex;
+            const remainingCells = (42 - totalCells) % 7; 
+
+            for (let i = 0; i < remainingCells; i++) {
+                calendarHtml += `<div class="day-cell other-month"></div>`;
+            }
+
+            calendarHtml += `</div>`; // Закрываем calendar-grid
+
+            // 4. Генерируем список событий (Summary List HTML)
+            let summaryHtml = '';
+            if (monthEventsList.length > 0) {
+                const uniqueEvents = [];
+                const addedEvents = new Set();
+                
+                // Фильтруем уникальные события
+                monthEventsList.forEach(event => {
+                    const key = event.date + event.name; 
+                    if (!addedEvents.has(key)) {
+                        uniqueEvents.push(event);
+                        addedEvents.add(key);
+                    }
+                });
+
+                uniqueEvents.sort((a, b) => new Date(a.date + 'T00:00:00') - new Date(b.date + 'T00:00:00'));
+                
+                const consolidatedEvents = [];
+                if (uniqueEvents.length > 0) {
+                    let currentGroup = { ...uniqueEvents[0], endDate: uniqueEvents[0].date };
+                    let groupEnd = new Date(currentGroup.date + 'T00:00:00');
+                    
+                    for (let i = 1; i < uniqueEvents.length; i++) {
+                        const nextItem = uniqueEvents[i];
+                        const nextDate = new Date(nextItem.date + 'T00:00:00');
+                        
+                        if (currentGroup.name === nextItem.name && 
+                            currentGroup.type === nextItem.type &&
+                            (nextDate.getTime() - groupEnd.getTime()) === (1000 * 60 * 60 * 24) 
+                        ) {
+                            groupEnd = nextDate; 
+                        } else {
+                            currentGroup.endDate = groupEnd.toLocaleDateString('en-CA');
+                            consolidatedEvents.push(currentGroup);
+                            
+                            currentGroup = { ...nextItem, endDate: nextItem.date };
+                            groupEnd = new Date(currentGroup.date + 'T00:00:00');
+                        }
+                    }
+                    currentGroup.endDate = groupEnd.toLocaleDateString('en-CA');
+                    consolidatedEvents.push(currentGroup);
+                }
+
+                const listItems = consolidatedEvents.map(item => {
+                    const startDate = new Date(item.date + 'T00:00:00');
+                    const endDate = new Date(item.endDate + 'T00:00:00');
+                    
+                    let dateFormatted;
+                    if (item.date === item.endDate) {
+                        dateFormatted = startDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                    } else {
+                        const startDay = startDate.toLocaleDateString('ru-RU', { day: 'numeric' });
+                        const endFormatted = endDate.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+                        dateFormatted = `${startDay} - ${endFormatted}`;
+                    }
+                    
+                    const icon = getIconByEventType(item.type);
+                    let colorClass = 'text-gray-700';
+                    
+                    if (item.type.includes('official-holiday')) colorClass = 'text-red-700 font-bold';
+                    if (item.type.includes('catholic-holiday')) colorClass = 'text-pink-700 font-semibold';
+                    if (item.type.includes('orthodox-holiday')) colorClass = 'text-amber-600 font-semibold';
+                    if (item.type.includes('exam')) colorClass = 'text-teal-600 font-semibold';
+                    if (item.type.includes('niko-testing')) colorClass = 'text-purple-700 font-bold';
+                    if (item.type.includes('competition')) colorClass = 'text-yellow-700';
+                    if (item.type.includes('transfer')) colorClass = 'text-blue-600 font-bold';
+                    if (item.type.includes('school-holiday')) colorClass = 'text-purple-600';
+                    
+                    return `
+                        <li class="flex items-start mb-1 leading-tight">
+                            <span class="mr-2 flex-shrink-0 text-sm">${icon}</span>
+                            <span class="text-xs ${colorClass}">
+                                <span class="font-bold">${dateFormatted}:</span> ${item.name}
+                            </span>
+                        </li>
+                    `;
+                }).join('');
+
+                summaryHtml = `
+                    <div class="p-4 bg-gray-50 border-t border-gray-200 rounded-b-xl">
+                        <h3 class="font-bold text-sm text-gray-800 mb-2">События месяца:</h3>
+                        <ul class="list-none p-0 m-0 space-y-1">
+                            ${listItems}
+                        </ul>
+                    </div>
+                `;
+            }
+
+
+            return `
+                <div class="bg-white rounded-xl shadow-lg">
+                    ${calendarHtml}
+                    ${summaryHtml}
+                </div>
+            `;
+        }
+
+        /**
+         * Основная функция рендеринга.
+         */
+        function renderCalendar() {
+            const container = document.getElementById('calendarContainer');
+            let current = new Date(START_DATE.getTime()); 
+            let html = '';
+
+            for (let i = 0; i < 12; i++) {
+                if (current.getFullYear() > 2026 || (current.getFullYear() === 2026 && current.getMonth() > 7)) {
+                    break;
+                }
+                
+                html += generateMonthBlock(current);
+                current.setMonth(current.getMonth() + 1);
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Запуск рендеринга после загрузки страницы
+        window.onload = function() {
+            renderCalendar(); 
+        };
+    </script>
+</body>
+</html>
+
